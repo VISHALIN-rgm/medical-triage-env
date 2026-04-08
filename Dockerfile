@@ -9,12 +9,16 @@ COPY . .
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port 8000 for FastAPI server
-EXPOSE 8000
+# Expose port 7860 for Gradio (HF Spaces default)
+EXPOSE 7860
 
-# Health check so Docker knows when the server is ready
-HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+# Set environment variables for Gradio
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+ENV GRADIO_SERVER_PORT=7860
 
-# Start the server + agent
-CMD ["python", "inference.py"]
+# Health check for Gradio
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860')" || exit 1
+
+# Run the Gradio/FastAPI app
+CMD ["python", "app.py"]
