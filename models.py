@@ -1,11 +1,12 @@
 """
 Pydantic models for Medical Triage Environment
+Fixed: added to_feature_vector(), corrected MedicalAction types to match inference.py
 """
-
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Literal
 from enum import Enum
 from datetime import datetime
+
 
 class PatientStatus(str, Enum):
     CRITICAL = "critical"
@@ -14,6 +15,7 @@ class PatientStatus(str, Enum):
     DISCHARGED = "discharged"
     DECEASED = "deceased"
 
+
 class VitalSigns(BaseModel):
     heart_rate: int = Field(ge=0, le=300, description="Beats per minute")
     blood_pressure_systolic: int = Field(ge=0, le=250, description="mmHg")
@@ -21,6 +23,21 @@ class VitalSigns(BaseModel):
     oxygen_saturation: float = Field(ge=0, le=100, description="Percentage")
     temperature: float = Field(ge=30, le=45, description="Celsius")
     respiratory_rate: int = Field(ge=0, le=60, description="Breaths per minute")
+
+    def to_feature_vector(self) -> List[float]:
+        """
+        Returns a normalized feature vector for use in RL/ML models.
+        All values scaled to roughly [0, 1] range.
+        """
+        return [
+            self.heart_rate / 200.0,
+            self.blood_pressure_systolic / 250.0,
+            self.blood_pressure_diastolic / 150.0,
+            self.oxygen_saturation / 100.0,
+            (self.temperature - 30.0) / 15.0,
+            self.respiratory_rate / 60.0,
+        ]
+
 
 class Patient(BaseModel):
     id: str
@@ -36,12 +53,26 @@ class Patient(BaseModel):
     medical_history: List[str] = []
     arrival_time: datetime = Field(default_factory=datetime.now)
 
+    def to_feature_vector(self) -> List[float]:
+        """
+        Full patient feature vector: vitals (6) + age (1) + urgency (1) = 8 features.
+        Suitable as input to a DQN or any neural policy.
+        """
+        vitals_vec = self.vitals.to_feature_vector()
+        return vitals_vec + [
+            self.age / 100.0,
+            self.urgency_score,
+        ]
+
+
+# FIX: action types now match what inference.py actually uses
 class MedicalAction(BaseModel):
-    type: Literal["triage", "examine", "order_test", "treat", "escalate", "discharge"]
+    type: Literal["discharge", "treat", "escalate", "investigate", "triage", "examine", "order_test"]
     patient_id: str
     test_name: Optional[str] = None
     treatment: Optional[str] = None
     notes: Optional[str] = None
+
 
 class MedicalObservation(BaseModel):
     patients: List[Patient]
@@ -53,6 +84,7 @@ class MedicalObservation(BaseModel):
     message: Optional[str] = None
     done: bool = False
     reward: Optional[float] = None
+
 
 class MedicalState(BaseModel):
     patients: List[Patient]
