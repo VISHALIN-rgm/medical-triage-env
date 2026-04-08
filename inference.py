@@ -779,8 +779,9 @@ async def health_check():
     return {"status": "initializing", "version": MODEL_VERSION}
 
 
+# FIXED: Added session_id parameter
 @app.post("/reset")
-async def reset(request: ResetRequest):
+async def reset(request: ResetRequest, session_id: str = "default"):
     """
     OpenEnv Reset endpoint.
     Initialises a new episode for the given task_id and returns
@@ -809,8 +810,7 @@ async def reset(request: ResetRequest):
     _agent.error_made          = False
     _agent.investigate_triggered = False
 
-    # Store session state
-    session_id = task_id  # simple session key; one per task
+    # Store session state using the provided session_id
     _get_sessions()[session_id] = {
         "env":        env,
         "patients":   patients,
