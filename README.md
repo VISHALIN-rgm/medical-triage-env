@@ -1,3 +1,13 @@
+---
+title: Medical Triage AI Agent
+emoji: 🏥
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_file: app.py
+pinned: false
+---
+
 # 🏥 Medical Triage Environment
 
 > **OpenEnv RL Environment for Emergency Department Triage**
@@ -6,6 +16,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104.1-green.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-orange.svg)](https://github.com/meta-pytorch/OpenEnv)
+[![Hugging Face](https://img.shields.io/badge/🤗-Hugging%20Face-yellow)](https://huggingface.co/spaces/kvishalini/medical-triage-env)
 
 ---
 
@@ -27,6 +38,7 @@
 - [Frameworks Used](#-frameworks-used)
 - [Results](#-results)
 - [License](#-license)
+- [Live Demo](#-live-demo)
 
 ---
 
@@ -86,22 +98,18 @@ action = MedicalAction(
 )
 ```
 
----
-
 ## 👁️ Observation Space
-
-Each step returns a `MedicalObservation` containing:
+Each step returns a MedicalObservation containing:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `patients` | `List[Patient]` | All current patients with vitals and symptoms |
-| `current_step` | `int` | Current step number |
-| `max_steps` | `int` | Maximum steps for this episode |
-| `task_id` | `str` | Current task (easy/medium/hard) |
-| `done` | `bool` | Whether episode is complete |
+| patients | List[Patient] | All current patients with vitals and symptoms |
+| current_step | int | Current step number |
+| max_steps | int | Maximum steps for this episode |
+| task_id | str | Current task (easy/medium/hard) |
+| done | bool | Whether episode is complete |
 
 ### Patient Data Structure
-
 ```python
 Patient(
     id="P1",
@@ -122,13 +130,10 @@ Patient(
 )
 ```
 
----
-
 ## 📊 Tasks & Difficulty Levels
 
 ### Task 1: Easy (3 patients)
-
-**Objective:** Identify which patient needs immediate care from vital signs alone
+Objective: Identify which patient needs immediate care from vital signs alone
 
 | Patient | Symptoms | Vitals | Expected Action |
 |---------|----------|--------|-----------------|
@@ -137,25 +142,20 @@ Patient(
 | P3 | Mild headache | HR=70, O2=99%, BP=120/80 | DISCHARGE |
 
 ### Task 2: Medium (5 patients)
-
-**Objective:** Prioritize 5 patients with conflicting symptoms
+Objective: Prioritize 5 patients with conflicting symptoms
 
 | Patient | Symptoms | Vitals | Expected Action |
 |---------|----------|--------|-----------------|
 | Mixed urgency cases | Fever, cough, chest pain | Various | TREAT/ESCALATE |
 
 ### Task 3: Hard (3 deteriorating patients)
-
-**Objective:** Manage patients whose condition worsens over time
+Objective: Manage patients whose condition worsens over time
 
 | Patient | Initial Condition | Deterioration | Expected Action |
-|---------|-------------------|---------------|-----------------|
+|---------|------------------|---------------|-----------------|
 | Varies | Moderate abnormalities | Worsening vitals | Adaptive treatment |
 
----
-
 ## 🎯 Reward Structure
-
 The reward function provides per-step feedback with partial credit:
 
 | Action | Correct | Wrong |
@@ -167,7 +167,6 @@ The reward function provides per-step feedback with partial credit:
 | Under-treatment (HIGH→DISCHARGE) | - | -8.0 |
 
 ### Reward Calculation
-
 ```python
 if action == expected:
     reward = 10.0  # Full reward for correct action
@@ -177,22 +176,18 @@ else:
     reward = -5.0 to -8.0  # Penalty for wrong actions
 ```
 
----
-
 ## 📦 Real Patient Data
-
 This environment uses 68,936 real de-identified patient records from the MIMIC-IV-ED database.
 
 ### Data Source
-
 | Field | Details |
 |-------|---------|
-| **Name** | MIMIC-IV-ED (Medical Information Mart for Intensive Care - Emergency Department) |
-| **Institution** | Beth Israel Deaconess Medical Center, Boston, MA |
-| **Access** | Public via [Hugging Face Datasets](https://huggingface.co/datasets) |
+| Name | MIMIC-IV-ED (Medical Information Mart for Intensive Care - Emergency Department) |
+| Institution | Beth Israel Deaconess Medical Center, Boston, MA |
+| Years | 2011-2019 |
+| Access | Public via Hugging Face Datasets |
 
 ### Risk Distribution (Actual)
-
 | Risk Level | Count | Percentage |
 |------------|-------|------------|
 | LOW (ESI 4-5) | 241 | 0.35% |
@@ -200,19 +195,15 @@ This environment uses 68,936 real de-identified patient records from the MIMIC-I
 | HIGH (ESI 1-2) | 10,610 | 15.4% |
 
 ### Sample Real Patients
-
 ```
 Elizabeth Lopez, 44  - Dyspnea (HR=92, O2=87%)
 Patricia Davis, 42   - Dyspnea (HR=88, O2=96%)
 Christopher Young, 52 - Transfer (HR=70, O2=85%)
 ```
 
----
-
 ## 🚀 Setup & Installation
 
 ### Prerequisites
-
 ```bash
 # Python 3.10+
 python --version
@@ -225,10 +216,9 @@ docker --version
 ```
 
 ### Installation
-
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/medical-triage-env
+git clone https://github.com/VISHALIN-rgm/medical-triage-env
 cd medical-triage-env
 
 # Create virtual environment
@@ -244,7 +234,6 @@ echo GROQ_API_KEY=your_key_here >> .env
 ```
 
 ### Dependencies
-
 ```
 fastapi==0.104.1
 uvicorn==0.24.0
@@ -255,12 +244,9 @@ python-dotenv
 numpy
 ```
 
----
-
 ## 📖 Usage
 
 ### Run the Agent
-
 ```bash
 # Basic run (rule-based mode)
 python inference.py
@@ -270,7 +256,6 @@ python inference.py
 ```
 
 ### Expected Output
-
 ```
 [START] task=easy env=medical_triage model=llama-3.3-70b-versatile
 [STEP] step=1 action=escalate(P1)  reward=10.00 done=false error=null
@@ -286,14 +271,12 @@ python inference.py
 ```
 
 ### Start API Server
-
 ```bash
 python inference.py
 # API server runs on http://localhost:8000
 ```
 
 ### Test API Endpoints
-
 ```bash
 # Health check
 curl http://localhost:8000/health
@@ -316,21 +299,17 @@ curl -X POST http://localhost:8000/predict \
   }'
 ```
 
----
-
 ## 🏆 Baseline Performance
 
 ### Agent Performance (90.9% Accuracy)
-
 | Task | Score | Max | Percentage |
 |------|-------|-----|------------|
 | Easy | 10.0 | 10.0 | 100% |
 | Medium | 20.0 | 20.0 | 100% |
 | Hard | 25.0 | 25.0 | 100% |
-| **TOTAL** | **55.0** | **55.0** | **100%** |
+| TOTAL | 55.0 | 55.0 | 100% |
 
 ### Action Distribution
-
 | Action | Count | Percentage |
 |--------|-------|------------|
 | DISCHARGE | 4 | 36% |
@@ -339,7 +318,6 @@ curl -X POST http://localhost:8000/predict \
 | INVESTIGATE | 1 | 9% |
 
 ### Risk Distribution
-
 | Risk Level | Percentage |
 |------------|------------|
 | LOW | 36% |
@@ -347,26 +325,22 @@ curl -X POST http://localhost:8000/predict \
 | HIGH | 36% |
 
 ### Q-Table (Learned Values)
-
 | State | DISCHARGE | TREAT | ESCALATE | INVESTIGATE |
 |-------|-----------|-------|----------|-------------|
 | LOW | 10.00 | 1.01 | 1.00 | 3.00 |
 | MEDIUM | 0.10 | 5.05 | -0.06 | 3.35 |
 | HIGH | -1.50 | 1.00 | 10.05 | 3.00 |
 
----
-
 ## 🔌 API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | API information |
-| `/health` | GET | Health check and status |
-| `/stats` | GET | Agent performance statistics |
-| `/predict` | POST | Clinical prediction endpoint |
+| / | GET | API information |
+| /health | GET | Health check and status |
+| /stats | GET | Agent performance statistics |
+| /predict | POST | Clinical prediction endpoint |
 
 ### Predict Request
-
 ```json
 {
   "age": 60,
@@ -381,7 +355,6 @@ curl -X POST http://localhost:8000/predict \
 ```
 
 ### Predict Response
-
 ```json
 {
   "news_score": 9,
@@ -393,15 +366,12 @@ curl -X POST http://localhost:8000/predict \
 }
 ```
 
----
-
 ## 📁 Project Structure
-
 ```
 medical_triage_env/
 ├── inference.py                           # Main agent
 ├── models.py                              # Pydantic data models
-├── real_data_loader.py                    # Real data
+├── real_data_loader.py                    # Real data loader
 ├── openenv.yaml                           # OpenEnv configuration
 ├── requirements.txt                       # Python dependencies
 ├── README.md                              # This file
@@ -417,12 +387,9 @@ medical_triage_env/
     └── medical_triage_env_environment.py  # Core environment
 ```
 
----
-
 ## 🏗️ Technical Architecture
 
 ### NEWS Score Calculation
-
 | Parameter | Normal | Abnormal | Critical |
 |-----------|--------|----------|----------|
 | Heart Rate | 51-90 bpm | 91-130 bpm | >130 or <40 |
@@ -431,23 +398,19 @@ medical_triage_env/
 | Systolic BP | 111-219 mmHg | 101-110 mmHg | ≤100 mmHg |
 
 ### Risk Classification
-
 | NEWS Score | Risk Level | Recommended Action |
-|------------|------------|--------------------|
+|------------|------------|-------------------|
 | 0-1 | LOW | DISCHARGE |
 | 2-5 | MEDIUM | TREAT |
 | ≥6 | HIGH | ESCALATE |
 
 ### Q-Learning Parameters
-
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | ε (epsilon) | 0.10 | Exploration rate |
 | α (alpha) | 0.11 | Learning rate |
 | γ (gamma) | 0.91 | Discount factor |
 | Error Rate | 10% | Realistic imperfection |
-
----
 
 ## 🛠️ Frameworks Used
 
@@ -462,7 +425,6 @@ medical_triage_env/
 | SQLite | - | Local patient database |
 
 ### Architecture Diagram
-
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    MEDICAL TRIAGE SYSTEM                     │
@@ -491,10 +453,7 @@ medical_triage_env/
 └─────────────────────────────────────────────────────────────┘
 ```
 
----
-
 ## 📈 Results
-
 ```
 ============================================================
 🏆 FINAL PERFORMANCE SUMMARY
@@ -520,28 +479,44 @@ medical_triage_env/
 ============================================================
 ```
 
----
+## 🌐 Live Demo
+The agent is deployed and accessible at:
+
+- **Hugging Face Space**: https://huggingface.co/spaces/kvishalini/medical-triage-env
+- **Live API**: https://kvishalini-medical-triage-env.hf.space
+
+### Test the Live API
+```bash
+# Health check
+curl https://kvishalini-medical-triage-env.hf.space/health
+
+# Make a prediction
+curl -X POST https://kvishalini-medical-triage-env.hf.space/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "age": 60,
+    "heart_rate": 120,
+    "oxygen_saturation": 88,
+    "systolic_bp": 80,
+    "diastolic_bp": 50,
+    "temperature": 37.2,
+    "symptoms": ["chest pain", "shortness of breath"],
+    "chief_complaint": "Chest pain radiating to left arm"
+  }'
+```
 
 ## 📄 License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
----
+This project is licensed under the MIT License — see the LICENSE file for details.
 
 ## 🙏 Acknowledgments
-
-- [MIT Lab for Computational Physiology](https://lcp.mit.edu/) — MIMIC-IV-ED database
-- [Beth Israel Deaconess Medical Center](https://www.bidmc.org/) — Patient data source
-- [Hugging Face](https://huggingface.co/) — Dataset hosting and Spaces deployment
-- Meta OpenEnv Team — Framework and inspiration
-
----
+- **MIT Lab for Computational Physiology** — MIMIC-IV-ED database
+- **Beth Israel Deaconess Medical Center** — Patient data source
+- **Hugging Face** — Dataset hosting and Spaces deployment
+- **Meta OpenEnv Team** — Framework and inspiration
+- **Groq** — Fast LLM inference
 
 ## 📧 Contact
+- **GitHub**: https://github.com/VISHALIN-rgm/medical-triage-env
+- **Hugging Face**: https://huggingface.co/spaces/kvishalini/medical-triage-env
 
-- **GitHub:** https://github.com/YOUR_USERNAME/medical-triage-env
-- **Hugging Face:** https://huggingface.co/spaces/YOUR_USERNAME/medical-triage-env
-
----
-
-*Built for clinical decision support and AI agent evaluation 🚀*
+Built for clinical decision support and AI agent evaluation 🚀
