@@ -1,54 +1,34 @@
 name: medical-triage-env
 version: 2.0.0
-description: Hospital triage environment for AI agent evaluation with 3 difficulty levels
+description: Emergency Department Triage Environment
+
+environment:
+  class: MedicalTriageEnvironment
+  module: server.medical_triage_env_environment
+
+endpoints:
+  reset:
+    path: /reset
+    method: POST
+  step:
+    path: /step
+    method: POST
+
+actions:
+  - DISCHARGE
+  - TREAT
+  - ESCALATE
+  - INVESTIGATE
 
 tasks:
-  - id: easy
-    name: Identify Critical Patients
-    description: Agent must identify which patient needs immediate care from vital signs
-    max_steps: 10
-    grader: easy_grader
-    expected_actions: ["escalate", "treat"]
-    
-  - id: medium
-    name: Prioritize Patient Queue
-    description: Agent must correctly prioritize 5 patients with conflicting symptoms
-    max_steps: 20
-    grader: medium_grader
-    expected_actions: ["treat", "escalate", "discharge"]
-    
-  - id: hard
-    name: Manage Deteriorating Patient
-    description: Agent must adaptively treat a patient whose condition worsens over time
-    max_steps: 25
-    grader: hard_grader
-    expected_actions: ["treat", "escalate"]
-
-observation_space:
-  patients: List[Patient] with vitals (HR, BP, O2, Temp), symptoms, status
-  current_step: int
-  max_steps: int
-  task_id: str
-  available_tests: List[str]
-  available_treatments: List[str]
-
-action_space:
-  type: Literal["triage", "examine", "order_test", "treat", "escalate", "discharge", "investigate"]
-  patient_id: str
-  test_name: Optional[str]
-  treatment: Optional[str]
-  notes: Optional[str]
-
-reward_structure:
-  per_step:
-    correct_action: +10
-    wrong_action: -8
-    investigate_appropriate: +4
-    step_penalty: -0.01
-  episode:
-    max_reward: 10 per patient
+  easy:
+    max_steps: 3
+  medium:
+    max_steps: 5
+  hard:
+    max_steps: 8
 
 deployment:
-  hf_space: true
   docker: true
-  base_image: python:3.10-slim
+  port: 8000
+  command: python -c "from server.app import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8000)"
