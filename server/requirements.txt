@@ -1,5 +1,8 @@
-fastapi>=0.104.1
-uvicorn>=0.24.0
-pydantic>=2.4.2
-requests>=2.31.0
-numpy>=1.24.3
+gradio
+fastapi
+uvicorn
+pydantic
+numpy
+python-dotenv
+openai
+datasets
