@@ -1,26 +1,20 @@
-
 FROM python:3.10-slim
 
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application
+# Copy all files
 COPY . .
 
-# Expose port
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Expose port 8000 for FastAPI server
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+# Health check so Docker knows when the server is ready
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-# Run the server
-CMD ["uvicorn", "server.medical_triage_env_environment:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the server + agent
+CMD ["python", "inference.py"]

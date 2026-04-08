@@ -1,69 +1,19 @@
 """
-Core Medical Triage Environment Logic - OpenEnv Compliant
+Core Medical Triage Environment Logic
 """
 
 import random
 import copy
-from typing import List, Dict, Tuple, Optional, Any
-from enum import Enum
-from pydantic import BaseModel
+from typing import List, Dict, Tuple, Optional
+import sys
+import os
+from datetime import datetime
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from real_data_loader import RealMedicalDataLoader
 
-# ============================================================================
-# Data Models
-# ============================================================================
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-class PatientStatus(str, Enum):
-    STABLE = "stable"
-    URGENT = "urgent"
-    CRITICAL = "critical"
-    DISCHARGED = "discharged"
-    DECEASED = "deceased"
-
-class VitalSigns(BaseModel):
-    heart_rate: int = 70
-    blood_pressure_systolic: int = 120
-    blood_pressure_diastolic: int = 80
-    oxygen_saturation: float = 98.0
-    temperature: float = 36.8
-    respiratory_rate: int = 16
-
-class Patient(BaseModel):
-    id: str
-    name: str = ""
-    age: int = 0
-    gender: str = "Unknown"
-    symptoms: List[str] = []
-    vitals: VitalSigns = VitalSigns()
-    status: PatientStatus = PatientStatus.STABLE
-    urgency_score: float = 0.5
-    time_to_deterioration: int = 5
-    chief_complaint: str = ""
-    medical_history: List[str] = []
-    processed: bool = False
-
-class MedicalAction(BaseModel):
-    type: str
-    patient_id: str
-    notes: Optional[str] = None
-
-class MedicalObservation(BaseModel):
-    patients: List[Patient]
-    current_step: int
-    max_steps: int
-    task_id: str
-    done: bool
-
-class MedicalState(BaseModel):
-    patients: List[Patient]
-    step_count: int
-    task_id: str
-    actions_taken: List[MedicalAction]
-    resource_usage: Dict[str, int]
-
-
-# ============================================================================
-# Main Environment Class
-# ============================================================================
+from models import Patient, VitalSigns, PatientStatus, MedicalAction, MedicalObservation, MedicalState
 
 class MedicalTriageEnvironment:
     def __init__(self):
@@ -74,11 +24,8 @@ class MedicalTriageEnvironment:
         self.actions_taken = []
         self.resource_usage = {"tests": 0, "treatments": 0}
         
-    def reset(self, task_id: str = "easy", seed: Optional[int] = None) -> MedicalObservation:
+    def reset(self, task_id: str = "easy", num_patients: int = 3):
         """Reset environment with new patients"""
-        if seed is not None:
-            random.seed(seed)
-            
         self.task_id = task_id
         self.step_count = 0
         self.actions_taken = []
@@ -86,17 +33,44 @@ class MedicalTriageEnvironment:
         
         # Set max steps based on task difficulty
         if task_id == "easy":
-            self.max_steps = 3
+            self.max_steps = 10
             num_patients = 3
         elif task_id == "medium":
-            self.max_steps = 5
+            self.max_steps = 20
             num_patients = 5
-        else:
-            self.max_steps = 8
+        else:  # hard
+            self.max_steps = 25
             num_patients = 3
         
         # Generate patients
-        self.patients = self._generate_patients(task_id, num_patients)
+        self.patients = []
+        names = ["John Smith", "Mary Johnson", "Robert Williams", "Patricia Brown", "Michael Jones"]
+        
+        for i in range(num_patients):
+            urgency = random.random()
+            
+            # Adjust urgency based on task
+            if task_id == "easy":
+                urgency = 0.8 if i == 0 else 0.3
+            elif task_id == "medium":
+                urgency = random.uniform(0.2, 0.9)
+            else:  # hard
+                urgency = random.uniform(0.4, 0.8)
+            
+            patient = Patient(
+                id=f"P{i+1}",
+                name=names[i % len(names)],
+                age=random.randint(20, 85),
+                gender=random.choice(["Male", "Female"]),
+                symptoms=self._get_symptoms(urgency),
+                vitals=self._get_vitals(urgency),
+                status=self._get_status(urgency),
+                urgency_score=urgency,
+                time_to_deterioration=random.randint(2, 5),
+                chief_complaint=self._get_chief_complaint(urgency),
+                medical_history=self._get_medical_history(urgency)
+            )
+            self.patients.append(patient)
         
         return self._get_observation()
     
@@ -106,94 +80,102 @@ class MedicalTriageEnvironment:
         self.actions_taken.append(action)
         
         reward = 0.0
-        info = {"action_taken": action.type, "patient_id": action.patient_id}
-        
-        # Find patient
-        patient = self._find_patient(action.patient_id)
-        if not patient:
-            return self._get_observation(), -1.0, True, {"error": "Patient not found"}
-        
-        # Convert action to lowercase
-        action_type = action.type.lower()
-        
-        # Get expected action
-        expected_action = self._get_expected_action(patient)
-        info["expected_action"] = expected_action
+        info = {}
         
         # Process action
-        if action_type == "escalate":
-            reward = self._handle_escalation(patient, expected_action)
-        elif action_type == "discharge":
-            reward = self._handle_discharge(patient, expected_action)
-        elif action_type == "treat":
-            reward = self._handle_treatment(patient, expected_action)
-        elif action_type == "investigate":
-            reward = self._handle_investigate(patient, expected_action)
-        else:
-            reward = -2.0
+        if action.type == "escalate":
+            reward = self._handle_escalation(action)
+        elif action.type == "discharge":
+            reward = self._handle_discharge(action)
+        elif action.type == "triage":
+            reward = self._handle_triage(action)
+        elif action.type == "order_test":
+            reward = self._handle_test(action)
+        elif action.type == "treat":
+            reward = self._handle_treatment(action)
+        elif action.type == "examine":
+            reward = 0.05
         
-        # Mark as processed
-        if action_type in ["escalate", "discharge", "treat"]:
-            patient.processed = True
-        
-        # Step penalty
+        # Step penalty to encourage efficiency
         reward -= 0.01
         
-        # Update patients
+        # Update patient deterioration
         self._update_patients()
         
         # Check if done
         done = self._check_done()
         
-        return self._get_observation(), reward, done, info
+        observation = self._get_observation()
+        return observation, reward, done, info
     
-    def _get_expected_action(self, patient: Patient) -> str:
-        urgency = patient.urgency_score
-        if urgency > 0.7:
-            return "ESCALATE"
-        elif urgency > 0.3:
-            return "TREAT"
-        else:
-            return "DISCHARGE"
+    def state(self) -> MedicalState:
+        """Return current state"""
+        return MedicalState(
+            patients=copy.deepcopy(self.patients),
+            step_count=self.step_count,
+            task_id=self.task_id,
+            actions_taken=self.actions_taken,
+            resource_usage=self.resource_usage
+        )
     
-    def _handle_escalation(self, patient: Patient, expected: str) -> float:
-        if expected == "ESCALATE":
+    # ============== Reward Handlers ==============
+    
+    def _handle_escalation(self, action: MedicalAction) -> float:
+        patient = self._find_patient(action.patient_id)
+        if not patient:
+            return -0.1
+        
+        if patient.urgency_score > 0.7:
             patient.status = PatientStatus.DISCHARGED
-            return 10.0
-        elif expected == "TREAT" and patient.urgency_score > 0.5:
-            return 3.0
+            return 1.0
+        elif patient.urgency_score > 0.5:
+            return 0.3
         else:
-            return -5.0
+            return -0.2
     
-    def _handle_discharge(self, patient: Patient, expected: str) -> float:
-        if expected == "DISCHARGE":
+    def _handle_discharge(self, action: MedicalAction) -> float:
+        patient = self._find_patient(action.patient_id)
+        if not patient:
+            return -0.1
+        
+        if patient.urgency_score < 0.3:
             patient.status = PatientStatus.DISCHARGED
-            return 10.0
-        elif expected == "TREAT" and patient.urgency_score < 0.4:
-            return 2.0
+            return 0.5
+        elif patient.urgency_score < 0.5:
+            return 0.2
         else:
-            return -8.0
+            return -0.3
     
-    def _handle_treatment(self, patient: Patient, expected: str) -> float:
-        self.resource_usage["treatments"] += 1
-        if expected == "TREAT":
-            patient.urgency_score = max(0.0, patient.urgency_score - 0.2)
-            patient.status = PatientStatus.STABLE
-            return 10.0
-        elif expected == "ESCALATE" and patient.urgency_score > 0.6:
-            return 2.0
-        else:
-            return -3.0
+    def _handle_triage(self, action: MedicalAction) -> float:
+        patient = self._find_patient(action.patient_id)
+        if not patient:
+            return -0.05
+        
+        notes = str(action.notes).lower() if action.notes else ""
+        if "critical" in notes and patient.urgency_score > 0.7:
+            return 0.3
+        elif "urgent" in notes and patient.urgency_score > 0.3:
+            return 0.2
+        elif "stable" in notes and patient.urgency_score < 0.3:
+            return 0.2
+        return 0.1
     
-    def _handle_investigate(self, patient: Patient, expected: str) -> float:
+    def _handle_test(self, action: MedicalAction) -> float:
         self.resource_usage["tests"] += 1
-        urgency = patient.urgency_score
-        if 0.3 <= urgency <= 0.5:
-            return 5.0
-        elif expected == "TREAT" and self.resource_usage["tests"] <= 3:
-            return 3.0
-        else:
-            return -2.0
+        if self.resource_usage["tests"] > 5:
+            return -0.1
+        return 0.1
+    
+    def _handle_treatment(self, action: MedicalAction) -> float:
+        self.resource_usage["treatments"] += 1
+        patient = self._find_patient(action.patient_id)
+        if patient and patient.urgency_score > 0.5:
+            # Treatment improves patient
+            patient.urgency_score = max(0.0, patient.urgency_score - 0.2)
+            return 0.4
+        return 0.1
+    
+    # ============== Helper Methods ==============
     
     def _update_patients(self):
         for patient in self.patients:
@@ -202,28 +184,23 @@ class MedicalTriageEnvironment:
                 if patient.time_to_deterioration <= 0:
                     patient.urgency_score = min(1.0, patient.urgency_score + 0.2)
                     patient.time_to_deterioration = random.randint(2, 4)
+                    
+                    if patient.urgency_score > 0.9:
+                        patient.status = PatientStatus.CRITICAL
     
     def _check_done(self) -> bool:
-        all_processed = all(p.processed for p in self.patients)
+        all_done = all(p.status in [PatientStatus.DISCHARGED, PatientStatus.DECEASED] 
+                      for p in self.patients)
         max_steps_reached = self.step_count >= self.max_steps
-        return all_processed or max_steps_reached
+        return all_done or max_steps_reached
     
     def _get_observation(self) -> MedicalObservation:
         return MedicalObservation(
             patients=copy.deepcopy(self.patients),
             current_step=self.step_count,
             max_steps=self.max_steps,
-            task_id=self.task_id if self.task_id else "easy",
+            task_id=self.task_id,
             done=self._check_done()
-        )
-    
-    def state(self) -> MedicalState:
-        return MedicalState(
-            patients=copy.deepcopy(self.patients),
-            step_count=self.step_count,
-            task_id=self.task_id if self.task_id else "easy",
-            actions_taken=self.actions_taken,
-            resource_usage=self.resource_usage
         )
     
     def _find_patient(self, patient_id: str) -> Optional[Patient]:
@@ -232,54 +209,30 @@ class MedicalTriageEnvironment:
                 return p
         return None
     
-    def _generate_patients(self, task_id: str, num_patients: int) -> List[Patient]:
-        patients = []
-        
-        if task_id == "easy":
-            scenarios = [
-                {
-                    "id": "P1", "name": "James Wilson", "age": 72,
-                    "symptoms": ["chest pain", "shortness of breath"],
-                    "vitals": VitalSigns(heart_rate=120, blood_pressure_systolic=85,
-                                        oxygen_saturation=88, temperature=37.2),
-                    "urgency_score": 0.85,
-                    "chief_complaint": "Severe chest pain"
-                },
-                {
-                    "id": "P2", "name": "Sarah Johnson", "age": 45,
-                    "symptoms": ["mild headache"],
-                    "vitals": VitalSigns(heart_rate=72, blood_pressure_systolic=118,
-                                        oxygen_saturation=99, temperature=36.8),
-                    "urgency_score": 0.15,
-                    "chief_complaint": "Mild headache"
-                },
-                {
-                    "id": "P3", "name": "Michael Brown", "age": 38,
-                    "symptoms": ["runny nose"],
-                    "vitals": VitalSigns(heart_rate=70, blood_pressure_systolic=120,
-                                        oxygen_saturation=99, temperature=36.9),
-                    "urgency_score": 0.10,
-                    "chief_complaint": "Cold symptoms"
-                }
-            ]
-            
-            for scenario in scenarios:
-                patient = Patient(
-                    id=scenario["id"],
-                    name=scenario["name"],
-                    age=scenario["age"],
-                    gender=random.choice(["Male", "Female"]),
-                    symptoms=scenario["symptoms"],
-                    vitals=scenario["vitals"],
-                    status=self._get_status(scenario["urgency_score"]),
-                    urgency_score=scenario["urgency_score"],
-                    time_to_deterioration=5,
-                    chief_complaint=scenario["chief_complaint"],
-                    processed=False
-                )
-                patients.append(patient)
-        
-        return patients
+    def _get_symptoms(self, urgency: float) -> List[str]:
+        if urgency > 0.7:
+            return ["chest pain", "shortness of breath", "dizziness", "nausea"]
+        elif urgency > 0.3:
+            return ["fever", "cough", "fatigue", "headache"]
+        else:
+            return ["mild pain", "runny nose", "minor scratch"]
+    
+    def _get_vitals(self, urgency: float) -> VitalSigns:
+        if urgency > 0.7:
+            return VitalSigns(
+                heart_rate=120, blood_pressure_systolic=80, blood_pressure_diastolic=50,
+                oxygen_saturation=88, temperature=39.0, respiratory_rate=28
+            )
+        elif urgency > 0.3:
+            return VitalSigns(
+                heart_rate=95, blood_pressure_systolic=110, blood_pressure_diastolic=70,
+                oxygen_saturation=96, temperature=38.0, respiratory_rate=18
+            )
+        else:
+            return VitalSigns(
+                heart_rate=70, blood_pressure_systolic=120, blood_pressure_diastolic=80,
+                oxygen_saturation=99, temperature=36.8, respiratory_rate=14
+            )
     
     def _get_status(self, urgency: float) -> PatientStatus:
         if urgency > 0.7:
@@ -287,15 +240,20 @@ class MedicalTriageEnvironment:
         elif urgency > 0.3:
             return PatientStatus.URGENT
         return PatientStatus.STABLE
-
-
-# ============================================================================
-# Main function
-# ============================================================================
-
-def main():
-    print("Medical Triage Environment - Ready")
-    print("Use server/app.py to start the API server")
-
-if __name__ == "__main__":
-    main()
+    
+    def _get_chief_complaint(self, urgency: float) -> str:
+        if urgency > 0.7:
+            return "Severe chest pain radiating to left arm"
+        elif urgency > 0.3:
+            return "Persistent fever and cough for 3 days"
+        return "Mild headache after work"
+    
+    def _get_medical_history(self, urgency: float) -> List[str]:
+        history = []
+        if urgency > 0.5:
+            history.append("Hypertension")
+        if urgency > 0.6:
+            history.append("Diabetes Type 2")
+        if random.random() > 0.8:
+            history.append("Previous hospitalization")
+        return history     
