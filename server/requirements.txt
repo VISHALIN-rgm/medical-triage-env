@@ -1,8 +1,5 @@
-gradio
 fastapi
 uvicorn
 pydantic
-numpy
 python-dotenv
-openai
 datasets

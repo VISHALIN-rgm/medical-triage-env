@@ -1,10 +1,16 @@
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy requirements from server folder
+COPY server/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+# Copy all files
+COPY server/ ./server/
+COPY *.py .
+COPY openenv.yaml .
 
-CMD ["python", "app.py"]
+EXPOSE 7860
+
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
