@@ -1,0 +1,50 @@
+### Health Check
+GET http://localhost:7860/health
+
+### Reset
+POST http://localhost:7860/reset?session_id=test123
+
+### Step 1 - Escalate P1
+POST http://localhost:7860/step?session_id=test123
+Content-Type: application/json
+
+{
+    "action": "escalate",
+    "patient_id": "P1",
+    "notes": "critical vitals"
+}
+
+### Step 2 - Discharge P2
+POST http://localhost:7860/step?session_id=test123
+Content-Type: application/json
+
+{
+    "action": "discharge",
+    "patient_id": "P2",
+    "notes": "stable patient"
+}
+
+### Step 3 - Treat P3
+POST http://localhost:7860/step?session_id=test123
+Content-Type: application/json
+
+{
+    "action": "treat",
+    "patient_id": "P3",
+    "notes": "moderate risk"
+}
+
+### Predict
+POST http://localhost:7860/predict
+Content-Type: application/json
+
+{
+    "age": 60,
+    "heart_rate": 120,
+    "oxygen_saturation": 88,
+    "systolic_bp": 80,
+    "diastolic_bp": 50,
+    "temperature": 37.2,
+    "symptoms": ["chest pain"],
+    "chief_complaint": "chest pain"
+}

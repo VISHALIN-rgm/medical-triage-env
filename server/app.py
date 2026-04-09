@@ -1,223 +1,283 @@
-"""
-FastAPI Server for Medical Triage Environment
-"""
-
 from fastapi import FastAPI, HTTPException
-from typing import Dict, List
-import sys
-import os
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List
+import uuid
+import uvicorn
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+app = FastAPI(title="Medical Triage OpenEnv", version="1.0.0")
 
-from models import MedicalAction
-from server.medical_triage_env_environment import MedicalTriageEnvironment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ============== Request/Response Models ==============
+# ── In-memory session store ──────────────────────────────────────────────────
+sessions = {}
+
+# ── Patient scenarios ────────────────────────────────────────────────────────
+SCENARIOS = [
+    {
+        "id": "P1",
+        "name": "James Wilson",
+        "age": 72,
+        "heart_rate": 118,
+        "oxygen_saturation": 88.0,
+        "systolic_bp": 85,
+        "diastolic_bp": 55,
+        "temperature": 37.2,
+        "respiratory_rate": 24,
+        "symptoms": ["chest pain", "shortness of breath"],
+        "chief_complaint": "Severe chest pain radiating to left arm",
+        "expected_action": "escalate",
+        "urgency_score": 0.85,
+        "status": "critical",
+    },
+    {
+        "id": "P2",
+        "name": "Sarah Johnson",
+        "age": 34,
+        "heart_rate": 72,
+        "oxygen_saturation": 99.0,
+        "systolic_bp": 118,
+        "diastolic_bp": 78,
+        "temperature": 36.8,
+        "respiratory_rate": 16,
+        "symptoms": ["mild headache"],
+        "chief_complaint": "Mild headache for 2 hours",
+        "expected_action": "discharge",
+        "urgency_score": 0.15,
+        "status": "stable",
+    },
+    {
+        "id": "P3",
+        "name": "Robert Chen",
+        "age": 55,
+        "heart_rate": 96,
+        "oxygen_saturation": 93.0,
+        "systolic_bp": 105,
+        "diastolic_bp": 68,
+        "temperature": 38.5,
+        "respiratory_rate": 20,
+        "symptoms": ["fever", "cough", "mild chest tightness"],
+        "chief_complaint": "Fever and productive cough for 3 days",
+        "expected_action": "treat",
+        "urgency_score": 0.55,
+        "status": "moderate",
+    },
+]
+
+MAX_STEPS = len(SCENARIOS)
+
+
+# ── Helper: NEWS score ────────────────────────────────────────────────────────
+def calculate_news(p: dict) -> int:
+    score = 0
+    hr = p["heart_rate"]
+    o2 = p["oxygen_saturation"]
+    sbp = p["systolic_bp"]
+    temp = p["temperature"]
+    rr = p["respiratory_rate"]
+
+    score += 3 if hr <= 40 or hr >= 131 else 2 if hr >= 111 else 1 if hr >= 91 or hr <= 50 else 0
+    score += 3 if o2 <= 91 else 2 if o2 <= 93 else 1 if o2 <= 95 else 0
+    score += 3 if sbp <= 90 else 2 if sbp <= 100 else 1 if sbp <= 110 else 0
+    score += 2 if temp <= 35.0 or temp >= 39.1 else 1 if temp <= 36.0 or temp >= 38.1 else 0
+    score += 3 if rr <= 8 or rr >= 25 else 2 if rr >= 21 else 1 if rr >= 9 else 0
+    return score
+
+
+def news_to_risk(score: int) -> str:
+    if score >= 6:
+        return "HIGH"
+    elif score >= 2:
+        return "MEDIUM"
+    return "LOW"
+
+
+def make_observation(session: dict) -> dict:
+    step = session["current_step"]
+    done = step >= MAX_STEPS
+    patients = []
+    if not done:
+        p = SCENARIOS[step]
+        news = calculate_news(p)
+        patients.append({
+            "id": p["id"],
+            "name": p["name"],
+            "age": p["age"],
+            "symptoms": p["symptoms"],
+            "chief_complaint": p["chief_complaint"],
+            "status": p["status"],
+            "urgency_score": p["urgency_score"],
+            "news_score": news,
+            "risk_level": news_to_risk(news),
+            "vitals": {
+                "heart_rate": p["heart_rate"],
+                "oxygen_saturation": p["oxygen_saturation"],
+                "systolic_bp": p["systolic_bp"],
+                "diastolic_bp": p["diastolic_bp"],
+                "temperature": p["temperature"],
+                "respiratory_rate": p["respiratory_rate"],
+            },
+        })
+    return {
+        "session_id": session["session_id"],
+        "patients": patients,
+        "current_step": step,
+        "max_steps": MAX_STEPS,
+        "done": done,
+        "total_reward": session["total_reward"],
+    }
+
+
+# ── Pydantic models ──────────────────────────────────────────────────────────
+class StepRequest(BaseModel):
+    action: str          # discharge | treat | escalate | investigate
+    patient_id: str
+    notes: Optional[str] = ""
+
 
 class PredictRequest(BaseModel):
-    """Request model for /predict endpoint"""
     age: int
     heart_rate: int
     oxygen_saturation: float
     systolic_bp: int
     diastolic_bp: int
     temperature: float
-    symptoms: List[str]
-    chief_complaint: str = "Not specified"
+    symptoms: List[str] = []
+    chief_complaint: str = ""
 
 
-class PredictResponse(BaseModel):
-    """Response model for /predict endpoint"""
-    news_score: int
-    risk_level: str
-    action: str
-    confidence: float
-    reasoning: str
-    q_value: float
+# ── OpenEnv required endpoints ───────────────────────────────────────────────
+
+@app.post("/reset")
+def reset(session_id: Optional[str] = None):
+    """OpenEnv reset — creates/resets a session and returns initial observation."""
+    sid = session_id or str(uuid.uuid4())
+    sessions[sid] = {
+        "session_id": sid,
+        "current_step": 0,
+        "total_reward": 0.0,
+        "history": [],
+    }
+    return make_observation(sessions[sid])
 
 
-# ============== FastAPI App ==============
+@app.post("/step")
+def step(body: StepRequest, session_id: Optional[str] = None):
+    """OpenEnv step — apply an action and return next observation + reward."""
+    sid = session_id or list(sessions.keys())[-1] if sessions else None
+    if not sid or sid not in sessions:
+        raise HTTPException(status_code=400, detail="Invalid or missing session_id. Call /reset first.")
 
-app = FastAPI(
-    title="Medical Triage Environment",
-    description="OpenEnv compliant medical triage simulation for AI agent evaluation",
-    version="2.0.0"
-)
+    session = sessions[sid]
+    step_idx = session["current_step"]
 
-environments: Dict[str, MedicalTriageEnvironment] = {}
+    if step_idx >= MAX_STEPS:
+        raise HTTPException(status_code=400, detail="Episode already done. Call /reset to start again.")
 
+    patient = SCENARIOS[step_idx]
+    action = body.action.lower().strip()
+    expected = patient["expected_action"]
 
-# ============== Helper Functions ==============
-
-def calculate_news_score(heart_rate: int, oxygen_saturation: float, temperature: float, systolic_bp: int) -> int:
-    """Calculate NEWS score based on vital signs"""
-    score = 0
-    
-    # Heart Rate
-    hr = heart_rate
-    if hr <= 40:
-        score += 3
-    elif hr <= 50:
-        score += 1
-    elif hr <= 90:
-        score += 0
-    elif hr <= 110:
-        score += 1
-    elif hr <= 130:
-        score += 2
+    # Reward logic
+    if action == expected:
+        reward = 10.0
+    elif action == "investigate":
+        reward = 5.0
+    elif expected == "escalate" and action == "discharge":
+        reward = -8.0   # dangerous under-treatment
+    elif expected == "discharge" and action == "escalate":
+        reward = -5.0   # over-escalation
     else:
-        score += 3
-    
-    # Oxygen Saturation
-    o2 = oxygen_saturation
-    if o2 <= 91:
-        score += 3
-    elif o2 <= 93:
-        score += 2
-    elif o2 <= 95:
-        score += 1
-    
-    # Temperature
-    temp = temperature
-    if temp <= 35.0:
-        score += 3
-    elif temp <= 36.0:
-        score += 1
-    elif temp <= 38.0:
-        score += 0
-    elif temp <= 39.0:
-        score += 1
-    else:
-        score += 2
-    
-    # Blood Pressure
-    sbp = systolic_bp
-    if sbp <= 90:
-        score += 3
-    elif sbp <= 100:
-        score += 2
-    elif sbp <= 110:
-        score += 1
-    elif sbp <= 219:
-        score += 0
-    else:
-        score += 2
-    
-    return score
+        reward = -5.0
+
+    session["total_reward"] += reward
+    session["history"].append({
+        "step": step_idx + 1,
+        "patient_id": body.patient_id,
+        "action": action,
+        "expected": expected,
+        "reward": reward,
+        "notes": body.notes,
+    })
+    session["current_step"] += 1
+
+    obs = make_observation(session)
+    obs["reward"] = reward
+    obs["action_taken"] = action
+    obs["expected_action"] = expected
+    obs["correct"] = action == expected
+    return obs
 
 
-# ============== API Endpoints ==============
+@app.get("/state")
+def state(session_id: Optional[str] = None):
+    """Return current state without advancing the episode."""
+    sid = session_id or (list(sessions.keys())[-1] if sessions else None)
+    if not sid or sid not in sessions:
+        raise HTTPException(status_code=400, detail="Invalid or missing session_id.")
+    return make_observation(sessions[sid])
+
+
+# ── Extra utility endpoints ──────────────────────────────────────────────────
 
 @app.get("/")
-async def root():
+def root():
     return {
-        "message": "Medical Triage Environment API",
-        "version": "2.0.0",
-        "endpoints": ["/health", "/reset", "/step", "/state", "/predict"],
-        "docs": "/docs"
+        "name": "Medical Triage OpenEnv",
+        "version": "1.0.0",
+        "endpoints": ["/reset", "/step", "/state", "/health", "/stats", "/predict"],
     }
 
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "medical-triage-env", "version": "2.0.0"}
+def health():
+    return {"status": "ok", "active_sessions": len(sessions)}
 
 
-@app.post("/reset")
-async def reset_environment(session_id: str, task_id: str = "easy", num_patients: int = 3):
-    """Reset environment with new patients"""
-    env = MedicalTriageEnvironment()
-    observation = env.reset(task_id=task_id, num_patients=num_patients)
-    environments[session_id] = env
-    return observation
-
-
-@app.post("/step")
-async def step_environment(session_id: str, action: MedicalAction):
-    """Execute an action"""
-    if session_id not in environments:
-        raise HTTPException(status_code=404, detail="Environment not found")
-    
-    env = environments[session_id]
-    observation, reward, done, info = env.step(action)
-    
+@app.get("/stats")
+def stats():
+    completed = [s for s in sessions.values() if s["current_step"] >= MAX_STEPS]
     return {
-        "observation": observation,
-        "reward": reward,
-        "done": done,
-        "info": info
+        "total_sessions": len(sessions),
+        "completed_episodes": len(completed),
+        "avg_reward": (
+            sum(s["total_reward"] for s in completed) / len(completed)
+            if completed else 0
+        ),
+        "max_steps_per_episode": MAX_STEPS,
     }
 
 
-@app.get("/state")
-async def get_state(session_id: str):
-    """Get current environment state"""
-    if session_id not in environments:
-        raise HTTPException(status_code=404, detail="Environment not found")
-    
-    return environments[session_id].state()
+@app.post("/predict")
+def predict(body: PredictRequest):
+    """Standalone prediction — no session required."""
+    p = {
+        "heart_rate": body.heart_rate,
+        "oxygen_saturation": body.oxygen_saturation,
+        "systolic_bp": body.systolic_bp,
+        "diastolic_bp": body.diastolic_bp,
+        "temperature": body.temperature,
+        "respiratory_rate": 18,
+    }
+    news = calculate_news(p)
+    risk = news_to_risk(news)
+    action_map = {"LOW": "discharge", "MEDIUM": "treat", "HIGH": "escalate"}
+    action = action_map[risk]
+    confidence = 0.95 if news >= 6 or news <= 1 else 0.78
+    return {
+        "news_score": news,
+        "risk_level": risk,
+        "action": action.upper(),
+        "confidence": confidence,
+        "reasoning": f"NEWS={news} → {risk} risk → {action.upper()}",
+    }
 
 
-@app.delete("/reset/{session_id}")
-async def delete_session(session_id: str):
-    """Clean up environment session"""
-    if session_id in environments:
-        del environments[session_id]
-        return {"message": "Session deleted"}
-    raise HTTPException(status_code=404, detail="Session not found")
-
-
-@app.post("/predict", response_model=PredictResponse)
-async def predict(request: PredictRequest):
-    """
-    Clinical prediction endpoint - Get triage recommendation based on patient vitals
-    """
-    try:
-        # Calculate NEWS score
-        news_score = calculate_news_score(
-            heart_rate=request.heart_rate,
-            oxygen_saturation=request.oxygen_saturation,
-            temperature=request.temperature,
-            systolic_bp=request.systolic_bp
-        )
-        
-        # Determine risk level and action based on NEWS score
-        if news_score >= 6:
-            risk_level = "HIGH"
-            action = "ESCALATE"
-            confidence = 0.92
-            reasoning = f"CRITICAL: NEWS={news_score}. HR={request.heart_rate}, O2={request.oxygen_saturation}%, BP={request.systolic_bp}. Immediate ICU escalation required."
-        elif news_score >= 3:
-            risk_level = "MEDIUM"
-            action = "TREAT"
-            confidence = 0.85
-            reasoning = f"MODERATE: NEWS={news_score}. HR={request.heart_rate}, Temp={request.temperature:.1f}°C. Medical treatment required."
-        else:
-            risk_level = "LOW"
-            action = "DISCHARGE"
-            confidence = 0.90
-            reasoning = f"LOW RISK: NEWS={news_score}. HR={request.heart_rate}, BP={request.systolic_bp}. Stable vitals, routine discharge."
-        
-        # Add symptom information to reasoning
-        if request.symptoms:
-            reasoning += f" Symptoms: {', '.join(request.symptoms[:2])}."
-        
-        return PredictResponse(
-            news_score=news_score,
-            risk_level=risk_level,
-            action=action,
-            confidence=confidence,
-            reasoning=reasoning,
-            q_value=8.5
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
-
-
-# ============== Main ==============
-
+# ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
