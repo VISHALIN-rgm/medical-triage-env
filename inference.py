@@ -48,7 +48,14 @@ MODEL_VERSION = "32.0.0"
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME   = os.getenv("MODEL_NAME",   "llama-3.3-70b-versatile")
-HF_TOKEN     = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY")
+
+# ── API key: checker injects API_KEY, fall back to local keys ──
+API_KEY  = (
+    os.getenv("API_KEY") or
+    os.getenv("HF_TOKEN") or
+    os.getenv("GROQ_API_KEY")
+)
+HF_TOKEN = API_KEY  # alias so rest of code stays compatible
 
 SHOW_PATIENT_DETAILS = True
 Q_VALUES_PATH        = "q_values.json"
@@ -93,8 +100,10 @@ ACTION_ICON = {
 
 ACTIONS = ["discharge", "treat", "escalate", "investigate"]
 
-if HF_TOKEN is None:
-    print("WARNING: HF_TOKEN not set - LLM reasoning disabled.", file=sys.stderr)
+if not API_KEY:
+    print("WARNING: No API_KEY set - LLM reasoning disabled.", file=sys.stderr)
+else:
+    print(f"  [LLM] API_KEY found, base_url={API_BASE_URL}", file=sys.stderr)
 
 # =============================================================
 # HELPERS
@@ -394,11 +403,11 @@ def has_infection_symptoms(patient) -> bool:
 # =============================================================
 
 def llm_reason(patient, news_score: int, action: str, is_error: bool = False) -> str:
-    if not OPENAI_AVAILABLE or HF_TOKEN is None:
+    if not OPENAI_AVAILABLE or not API_KEY:
         base = f"NEWS={news_score} -> {action.upper()}"
         return base + (" [clinical variation]" if is_error else "")
     try:
-        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN, timeout=30)
+        client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY, timeout=30)
         v      = patient.vitals
         note   = " (clinical judgment variation)" if is_error else ""
         prompt = (
@@ -639,7 +648,7 @@ class RealClinicalAgent:
             news_score=news_score,
             requires_investigation=requires_investigation,
             q_value=q_value,
-            llm_used=OPENAI_AVAILABLE and HF_TOKEN is not None,
+            llm_used=OPENAI_AVAILABLE and bool(API_KEY),
             is_error=is_error,
             data_source="real",
         )
