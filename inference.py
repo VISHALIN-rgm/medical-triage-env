@@ -846,6 +846,7 @@ async def reset(
 
     if not session_id:
         session_id = f"session_{int(time.time())}"
+    _warm_up_llm()  # guaranteed LLM proxy call
 
     task_id = request.task_id
     if task_id not in ("easy", "medium", "hard"):
