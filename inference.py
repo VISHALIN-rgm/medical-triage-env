@@ -838,7 +838,7 @@ async def health_check():
 
 @app.post("/reset")
 async def reset(
-    request: ResetRequest,
+    request: Optional[ResetRequest] = None,
     session_id: Optional[str] = Query(None),
 ):
     if not _agent or not _data_loader:
@@ -848,7 +848,7 @@ async def reset(
         session_id = f"session_{int(time.time())}"
     _warm_up_llm()  # guaranteed LLM proxy call
 
-    task_id = request.task_id
+    task_id = request.task_id if request else "easy"
     if task_id not in ("easy", "medium", "hard"):
         raise HTTPException(status_code=400, detail=f"Unknown task_id '{task_id}'.")
 
