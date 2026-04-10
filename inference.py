@@ -41,17 +41,17 @@ except ImportError:
 MODEL_VERSION = "32.0.0"
 
 # =============================================================
-# STRICT ENV READING — checker injects API_BASE_URL and API_KEY
-# Do NOT use load_dotenv() — it overwrites checker's injected vars
+# STRICT ENV READING — exactly as checker instructs:
+# base_url=os.environ["API_BASE_URL"], api_key=os.environ["API_KEY"]
 # =============================================================
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-API_KEY      = os.environ.get("API_KEY", "")
+API_BASE_URL = os.environ["API_BASE_URL"]
+API_KEY      = os.environ["API_KEY"]
 MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-3.5-turbo")
 HF_TOKEN     = API_KEY  # alias
 
 # Print env state for checker logs
 print(f"[ENV] API_BASE_URL={API_BASE_URL}", file=sys.stderr)
-print(f"[ENV] API_KEY={'SET' if API_KEY else 'NOT SET'}", file=sys.stderr)
+print(f"[ENV] API_KEY=SET", file=sys.stderr)
 print(f"[ENV] MODEL_NAME={MODEL_NAME}", file=sys.stderr)
 
 SHOW_PATIENT_DETAILS = True
@@ -97,8 +97,7 @@ ACTION_ICON = {
 
 ACTIONS = ["discharge", "treat", "escalate", "investigate"]
 
-if not API_KEY:
-    print("WARNING: No API_KEY set - LLM reasoning disabled.", file=sys.stderr)
+print(f"[LLM] Using base_url={API_BASE_URL}", file=sys.stderr)
 
 # =============================================================
 # LLM WARM-UP — guaranteed proxy call at startup
@@ -108,9 +107,6 @@ def _warm_up_llm():
     """Make one guaranteed LLM call so checker sees proxy traffic."""
     if not OPENAI_AVAILABLE:
         print("[LLM] openai package not available, skipping warm-up.", file=sys.stderr)
-        return
-    if not API_KEY:
-        print("[LLM] No API_KEY, skipping warm-up.", file=sys.stderr)
         return
     try:
         print(f"[LLM] Warm-up call → {API_BASE_URL}", file=sys.stderr)
@@ -430,7 +426,7 @@ def has_infection_symptoms(patient) -> bool:
 
 def llm_reason(patient, news_score: int, action: str, is_error: bool = False) -> str:
     """Call LLM via proxy — always uses API_KEY and API_BASE_URL from env."""
-    if not OPENAI_AVAILABLE or not API_KEY:
+    if not OPENAI_AVAILABLE:
         base = f"NEWS={news_score} -> {action.upper()}"
         return base + (" [clinical variation]" if is_error else "")
     try:
