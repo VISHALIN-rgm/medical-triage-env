@@ -41,17 +41,17 @@ except ImportError:
 MODEL_VERSION = "32.0.0"
 
 # =============================================================
-# STRICT ENV READING — exactly as checker instructs:
-# base_url=os.environ["API_BASE_URL"], api_key=os.environ["API_KEY"]
+# ENV READING — checker injects API_BASE_URL and API_KEY
+# Use .get() so server doesn't crash if not set locally
 # =============================================================
-API_BASE_URL = os.environ["API_BASE_URL"]
-API_KEY      = os.environ["API_KEY"]
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+API_KEY      = os.environ.get("API_KEY", "")
 MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-3.5-turbo")
 HF_TOKEN     = API_KEY  # alias
 
 # Print env state for checker logs
 print(f"[ENV] API_BASE_URL={API_BASE_URL}", file=sys.stderr)
-print(f"[ENV] API_KEY=SET", file=sys.stderr)
+print(f"[ENV] API_KEY={'SET' if API_KEY else 'NOT SET'}", file=sys.stderr)
 print(f"[ENV] MODEL_NAME={MODEL_NAME}", file=sys.stderr)
 
 SHOW_PATIENT_DETAILS = True
