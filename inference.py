@@ -1093,7 +1093,7 @@ def run_task(task_id: str, agent: RealClinicalAgent,
     max_score        = {"easy": 10.0, "medium": 20.0, "hard": 25.0}.get(task_id, 20.0)
     capped_score     = min(task_reward, max_score)
     max_possible     = len(patients) * 10
-    normalized_score = min(1.0, max(0.0, task_reward / max_possible)) if max_possible else 0.0
+    normalized_score = min(0.999, max(0.001, task_reward / max_possible)) if max_possible else 0.001
     rewards_str      = ','.join(f"{r:.2f}" for r in rewards)
 
     print(f"[END] success=true steps={len(patients)} "
