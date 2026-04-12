@@ -195,7 +195,6 @@ Delayed treatment makes critical patients harder to save — tests time-critical
 | Field | Details |
 |-------|---------|
 | **Source** | Beth Israel Deaconess Medical Center, Boston |
-| **Years** | 2011–2019 |
 | **Records** | 68,936 de-identified ED visits |
 | **Access** | Public via Hugging Face Datasets |
 
@@ -300,6 +299,7 @@ docker run -p 7860:7860 -e API_KEY=your_key medical-triage
 - **HF Space**: https://huggingface.co/spaces/kvishalini/medical-triage-env
 - **Live API**: https://kvishalini-medical-triage-env.hf.space
 - **API Docs**: https://kvishalini-medical-triage-env.hf.space/docs
+- **UI** : https://kvishalini-medical-triage-env.hf.space/ui
 
 ---
 
