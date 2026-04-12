@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medical Triage AI — Emergency Department</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --red:#E24B4A;--red-bg:#FCEBEB;--red-border:#F09595;
+    --amber:#BA7517;--amber-bg:#FAEEDA;--amber-border:#FAC775;
+    --green:#3B6D11;--green-bg:#EAF3DE;--green-border:#97C459;
+    --blue:#185FA5;--blue-bg:#E6F1FB;--blue-border:#85B7EB;
+    --purple:#534AB7;--purple-bg:#EEEDFE;--purple-border:#AFA9EC;
+    --text:#1a1a1a;--text2:#555;--text3:#888;
+    --border:#e5e5e5;--bg:#f7f7f5;--card:#fff;
+    --radius:10px;--radius-sm:6px;
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+  /* Header */
+  .header{background:var(--card);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:16px;height:56px;position:sticky;top:0;z-index:100}
+  .header-icon{width:32px;height:32px;background:#E24B4A;border-radius:8px;display:flex;align-items:center;justify-content:center}
+  .header-icon svg{width:18px;height:18px;fill:white}
+  .header h1{font-size:15px;font-weight:600;color:var(--text)}
+  .header-sub{font-size:12px;color:var(--text3);margin-left:auto}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:#639922;display:inline-block;margin-right:6px;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  /* Layout */
+  .layout{display:grid;grid-template-columns:280px 1fr 320px;gap:0;height:calc(100vh - 56px)}
+
+  /* Left Panel */
+  .left-panel{background:var(--card);border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+  .panel-section{padding:16px;border-bottom:1px solid var(--border)}
+  .panel-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+  .task-btn{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);cursor:pointer;text-align:left;font-size:13px;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:8px;transition:all .15s}
+  .task-btn:hover{background:var(--bg);border-color:#ccc}
+  .task-btn.active{background:var(--blue-bg);border-color:var(--blue-border);color:var(--blue)}
+  .task-badge{font-size:10px;padding:2px 7px;border-radius:20px;margin-left:auto;font-weight:500}
+  .badge-easy{background:#EAF3DE;color:var(--green)}
+  .badge-medium{background:var(--amber-bg);color:var(--amber)}
+  .badge-hard{background:var(--red-bg);color:var(--red)}
+
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat-card{background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px}
+  .stat-val{font-size:20px;font-weight:600;color:var(--text)}
+  .stat-lbl{font-size:11px;color:var(--text3);margin-top:2px}
+
+  /* Patient List */
+  .patient-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+  .patient-item:hover{background:var(--bg)}
+  .patient-item.active{background:var(--blue-bg)}
+  .opacity-50{opacity:0.6}
+  .patient-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .patient-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+  .avatar-red{background:var(--red-bg);color:var(--red)}
+  .avatar-amber{background:var(--amber-bg);color:var(--amber)}
+  .avatar-green{background:var(--green-bg);color:var(--green)}
+  .patient-name{font-size:13px;font-weight:500}
+  .patient-meta{font-size:11px;color:var(--text3)}
+  .risk-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-left:auto}
+  .pill-HIGH{background:var(--red-bg);color:var(--red)}
+  .pill-MEDIUM{background:var(--amber-bg);color:var(--amber)}
+  .pill-LOW{background:var(--green-bg);color:var(--green)}
+
+  /* Center Panel */
+  .center-panel{overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--text3)}
+  .empty-icon{width:48px;height:48px;border-radius:12px;background:var(--border);display:flex;align-items:center;justify-content:center}
+
+  .patient-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .card-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+  .card-title{font-size:14px;font-weight:600}
+  .card-sub{font-size:12px;color:var(--text3)}
+  .card-body{padding:16px}
+
+  .vitals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .vital-item{background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;border-left:3px solid var(--border)}
+  .vital-item.critical{border-left-color:var(--red)}
+  .vital-item.warning{border-left-color:#EF9F27}
+  .vital-item.normal{border-left-color:var(--green-border)}
+  .vital-val{font-size:18px;font-weight:600;color:var(--text)}
+  .vital-lbl{font-size:11px;color:var(--text3);margin-top:2px}
+  .vital-unit{font-size:11px;color:var(--text3);font-weight:400}
+
+  .scores-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .score-box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;text-align:center}
+  .score-num{font-size:22px;font-weight:700}
+  .score-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+  .score-HIGH{color:var(--red)}
+  .score-MEDIUM{color:var(--amber)}
+  .score-LOW{color:var(--green)}
+
+  .action-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .action-btn{padding:10px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .action-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  .action-btn:disabled{opacity:0.6;cursor:not-allowed}
+  .action-btn.btn-discharge:hover:not(:disabled),.action-btn.btn-discharge.selected{background:var(--green-bg);border-color:var(--green-border);color:var(--green)}
+  .action-btn.btn-treat:hover:not(:disabled),.action-btn.btn-treat.selected{background:var(--amber-bg);border-color:var(--amber-border);color:var(--amber)}
+  .action-btn.btn-escalate:hover:not(:disabled),.action-btn.btn-escalate.selected{background:var(--red-bg);border-color:var(--red-border);color:var(--red)}
+  .action-btn.btn-investigate:hover:not(:disabled),.action-btn.btn-investigate.selected{background:var(--blue-bg);border-color:var(--blue-border);color:var(--blue)}
+  .action-icon{font-size:16px}
+
+  .reasoning-box{background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:var(--text2);line-height:1.6;border-left:3px solid var(--purple-border)}
+
+  /* Right Panel */
+  .right-panel{background:var(--card);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+
+  .session-info{padding:14px 16px;background:var(--blue-bg);border-bottom:1px solid var(--blue-border)}
+  .session-label{font-size:11px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  .progress-bar{height:4px;background:rgba(24,95,165,.15);border-radius:2px;overflow:hidden;margin:8px 0}
+  .progress-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s}
+
+  .timeline{padding:0}
+  .tl-item{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px}
+  .tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+  .dot-ok{background:#639922}
+  .dot-wrong{background:var(--red)}
+  .dot-pending{background:#ccc}
+  .tl-content{} 
+  .tl-action{font-size:12px;font-weight:500}
+  .tl-meta{font-size:11px;color:var(--text3);margin-top:2px}
+  .tl-reward{font-size:12px;font-weight:600;margin-left:auto;padding-top:2px}
+  .reward-pos{color:var(--green)}
+  .reward-neg{color:var(--red)}
+
+  .feature-bar{margin-bottom:8px}
+  .feature-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px}
+  .bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+  .bar-fill{height:100%;background:var(--purple);border-radius:3px;transition:width .5s}
+
+  .btn-primary{width:100%;padding:11px;background:#E24B4A;border:none;border-radius:var(--radius-sm);color:white;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+  .btn-primary:hover:not(:disabled){background:#c93b3a}
+  .btn-primary:disabled{background:#ccc;cursor:not-allowed}
+  .btn-secondary{width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;cursor:pointer;margin-top:8px;transition:background .15s}
+  .btn-secondary:hover{background:var(--bg)}
+
+  .alert-box{padding:10px 12px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .alert-sepsis{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+  .alert-info{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+
+  .q-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .q-lbl{font-size:11px;color:var(--text2);width:72px;text-align:right}
+  .q-track{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+  .q-fill{height:100%;border-radius:4px;transition:width .5s}
+  .q-val{font-size:11px;color:var(--text3);width:36px}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:white;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
+  .toast.show{opacity:1}
+
+  .loader{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media(max-width:900px){
+    .layout{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}
+    .left-panel,.right-panel{height:auto;max-height:280px}
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-icon">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+  </div>
+  <h1>Medical Triage AI</h1>
+  <span style="font-size:12px;color:var(--text3);margin-left:8px">Dueling DQN + NEWS2 + Sepsis-3</span>
+  <div class="header-sub">
+    <span class="status-dot"></span>
+    <span id="status-text">Connecting...</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="panel-label">Select Task</div>
+      <button class="task-btn active" id="btn-easy">
+        <span>Easy Mode</span><span class="task-badge badge-easy">3 patients</span>
+      </button>
+      <button class="task-btn" id="btn-medium">
+        <span>Medium Mode</span><span class="task-badge badge-medium">5 patients</span>
+      </button>
+      <button class="task-btn" id="btn-hard">
+        <span>Hard Mode</span><span class="task-badge badge-hard">deteriorating</span>
+      </button>
+      <button class="btn-primary" id="start-btn" style="margin-top:12px">
+        Start Episode
+      </button>
+      <button class="btn-secondary" id="auto-demo-btn">Run Auto Demo</button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Performance</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-val" id="stat-acc">—</div><div class="stat-lbl">Accuracy</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-reward">—</div><div class="stat-lbl">Total Reward</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-eps">—</div><div class="stat-lbl">Epsilon</div></div>
+        <div class="stat-card"><div class="stat-val" id="stat-steps">—</div><div class="stat-lbl">DQN Steps</div></div>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex:1">
+      <div class="panel-label">Patients Queue</div>
+      <div id="patient-list"><div style="font-size:12px;color:var(--text3);text-align:center;padding:20px">Start an episode to load patients</div></div>
+    </div>
+  </div>
+
+  <!-- CENTER PANEL -->
+  <div class="center-panel" id="center-panel">
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </div>
+      <div style="font-size:14px;font-weight:500">No active episode</div>
+      <div style="font-size:12px">Select a task and start an episode to begin triage</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="session-info">
+      <div class="session-label">Episode Progress</div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span id="ep-task" style="font-weight:500">No active episode</span>
+        <span id="ep-step" style="color:var(--blue)">—</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div style="font-size:11px;color:var(--blue)">Session: <span id="ep-session">—</span></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Q-Value Distribution</div>
+      <div id="q-bars">
+        <div style="font-size:12px;color:var(--text3);text-align:center;padding:8px">No data yet</div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Feature Importance</div>
+      <div id="feat-bars">
+        <div style="font-size:12px;color:var(--text3);text-align:center;padding:8px">No data yet</div>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex:1">
+      <div class="panel-label">Decision Timeline</div>
+      <div id="timeline"><div style="font-size:12px;color:var(--text3);text-align:center;padding:16px">Decisions will appear here</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// --- CONFIGURATION ---
+const BASE = (() => {
+  // For local file preview or development, fallback to localhost:7860
+  if (window.location.origin === 'null' || window.location.origin === 'file://') {
+    return 'http://localhost:7860';
+  }
+  // If served from a real domain, use the same origin (backend assumed on same host)
+  return window.location.origin;
+})();
+
+let currentTask = 'easy';
+let sessionId = null;
+let patients = [];
+let currentPatientIdx = 0;
+let timelineEntries = [];
+let totalReward = 0;
+let episodeActive = false;
+let autoRunning = false;
+let currentMaxSteps = 10; // will update from backend if available
+
+// DOM elements binding
+const startBtn = document.getElementById('start-btn');
+const autoDemoBtn = document.getElementById('auto-demo-btn');
+const btnEasy = document.getElementById('btn-easy');
+const btnMedium = document.getElementById('btn-medium');
+const btnHard = document.getElementById('btn-hard');
+
+// --- Helper functions ---
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch(`${BASE}/health`);
+    if (!r.ok) throw new Error('Health check failed');
+    const d = await r.json();
+    document.getElementById('status-text').textContent =
+      d.status === 'healthy' ? `Online — ${d.architecture || 'DQN'}` : 'Initializing...';
+    if (d.status === 'healthy') updateStats();
+  } catch(e) {
+    document.getElementById('status-text').textContent = 'Offline — check server';
+    console.warn('Health check error:', e);
+  }
+}
+
+async function updateStats() {
+  try {
+    const r = await fetch(`${BASE}/stats`);
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('stat-acc').textContent = d.accuracy !== undefined && d.accuracy !== null ? d.accuracy.toFixed(1) + '%' : '—';
+    document.getElementById('stat-reward').textContent = d.total_reward !== undefined ? d.total_reward.toFixed(0) : '—';
+    document.getElementById('stat-eps').textContent = d.epsilon !== undefined ? d.epsilon.toFixed(3) : '—';
+    document.getElementById('stat-steps').textContent = d.dqn_steps || d.total_decisions || '—';
+  } catch(e) {}
+}
+
+function selectTask(t) {
+  currentTask = t;
+  btnEasy.classList.toggle('active', t === 'easy');
+  btnMedium.classList.toggle('active', t === 'medium');
+  btnHard.classList.toggle('active', t === 'hard');
+}
+
+// Attach task selectors
+btnEasy.onclick = () => selectTask('easy');
+btnMedium.onclick = () => selectTask('medium');
+btnHard.onclick = () => selectTask('hard');
+
+// Helper for NEWS2 & Sepsis (local display)
+function estimateNEWS(v) {
+  if (!v) return 0;
+  let s = 0;
+  const hr=v.heart_rate||80, o2=v.oxygen_saturation||98, tmp=v.temperature||37,
+        sbp=v.blood_pressure_systolic||120, rr=v.respiratory_rate||16;
+  if(hr<=40||hr>=131)s+=3; else if(hr<=50||hr>=111)s+=1; else if(hr>=91)s+=1;
+  if(o2<=91)s+=3; else if(o2<=93)s+=2; else if(o2<=95)s+=1;
+  if(tmp<=35)s+=3; else if(tmp<=36)s+=1; else if(tmp>=39.1)s+=2; else if(tmp>=38.1)s+=1;
+  if(sbp<=90)s+=3; else if(sbp<=100)s+=2; else if(sbp<=110)s+=1;
+  if(rr<=8||rr>=25)s+=3; else if(rr>=21)s+=2;
+  return s;
+}
+
+function estimateSepsis(v) {
+  if (!v) return 0;
+  let c = 0;
+  if(v.temperature>38.3||v.temperature<36) c++;
+  if(v.heart_rate>90) c++;
+  if(v.respiratory_rate>20) c++;
+  if(v.blood_pressure_systolic<100) c++;
+  return Math.min(c / 4, 1);
+}
+
+// Render patient list (left panel)
+function renderPatientList() {
+  const el = document.getElementById('patient-list');
+  if (!patients.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px">No patients loaded</div>';
+    return;
+  }
+  el.innerHTML = patients.map((p, i) => {
+    const news = estimateNEWS(p.vitals);
+    const risk = news >= 6 ? 'HIGH' : news >= 2 ? 'MEDIUM' : 'LOW';
+    const avatarClass = risk === 'HIGH' ? 'avatar-red' : risk === 'MEDIUM' ? 'avatar-amber' : 'avatar-green';
+    const initials = (p.name || 'Patient').split(' ').map(x => x[0]).join('').slice(0,2);
+    const done = i < currentPatientIdx;
+    return `
+      <div class="patient-item ${i === currentPatientIdx ? 'active' : ''} ${done ? 'opacity-50' : ''}"
+           data-idx="${i}">
+        <div class="patient-header">
+          <div class="patient-avatar ${avatarClass}">${initials}</div>
+          <div>
+            <div class="patient-name">${p.name || 'Unknown'} <span style="color:var(--text3);font-weight:400">· ${p.age || '?'}y</span></div>
+            <div class="patient-meta">${p.chief_complaint ? p.chief_complaint.slice(0,35) : (p.symptoms||[]).join(', ').slice(0,35)}</div>
+          </div>
+          <span class="risk-pill pill-${risk}">${risk}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  // attach click handlers dynamically
+  document.querySelectorAll('.patient-item').forEach((item, idx) => {
+    const origIdx = parseInt(item.getAttribute('data-idx'));
+    if (!isNaN(origIdx)) {
+      item.onclick = () => selectPatient(origIdx);
+    }
+  });
+}
+
+function selectPatient(idx) {
+  if (!episodeActive || idx >= patients.length) return;
+  currentPatientIdx = idx;
+  renderPatientList();
+  const p = patients[idx];
+  if (!p) return;
+  const news = estimateNEWS(p.vitals);
+  const risk = news >= 6 ? 'HIGH' : news >= 2 ? 'MEDIUM' : 'LOW';
+  const sepsis = estimateSepsis(p.vitals);
+
+  const center = document.getElementById('center-panel');
+  center.innerHTML = `
+    <div class="patient-card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">${p.name || 'Patient'} · Age ${p.age || '?'}</div>
+          <div class="card-sub">${p.chief_complaint || (p.symptoms||[]).join(', ') || 'No complaint'}</div>
+        </div>
+        <span class="risk-pill pill-${risk}" style="font-size:12px;padding:4px 12px">${risk} RISK</span>
+      </div>
+      <div class="card-body">
+        ${sepsis > 0.5 ? `<div class="alert-box alert-sepsis">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Sepsis alert — probability ${(sepsis*100).toFixed(0)}%
+        </div>` : ''}
+        <div class="vitals-grid">
+          ${vitalCard('HR', p.vitals.heart_rate ?? '—', 'bpm', (p.vitals.heart_rate>110||p.vitals.heart_rate<50) ? 'critical' : p.vitals.heart_rate>90 ? 'warning' : 'normal')}
+          ${vitalCard('SpO₂', p.vitals.oxygen_saturation ?? '—', '%', p.vitals.oxygen_saturation<92 ? 'critical' : p.vitals.oxygen_saturation<95 ? 'warning' : 'normal')}
+          ${vitalCard('BP', (p.vitals.blood_pressure_systolic??'?')+'/'+(p.vitals.blood_pressure_diastolic??'?'), 'mmHg', p.vitals.blood_pressure_systolic<90 ? 'critical' : p.vitals.blood_pressure_systolic<100 ? 'warning' : 'normal')}
+          ${vitalCard('Temp', p.vitals.temperature ? p.vitals.temperature.toFixed(1) : '—', '°C', p.vitals.temperature>39||p.vitals.temperature<35.5 ? 'critical' : p.vitals.temperature>38 ? 'warning' : 'normal')}
+          ${vitalCard('RR', p.vitals.respiratory_rate ?? '—', '/min', p.vitals.respiratory_rate>24||p.vitals.respiratory_rate<=8 ? 'critical' : p.vitals.respiratory_rate>20 ? 'warning' : 'normal')}
+          ${vitalCard('Urgency', ((p.urgency_score||0)*100).toFixed(0), '%', (p.urgency_score||0)>0.7 ? 'critical' : (p.urgency_score||0)>0.4 ? 'warning' : 'normal')}
+        </div>
+        <div class="scores-row">
+          <div class="score-box"><div class="score-num score-${risk}">${news}</div><div class="score-lbl">NEWS2</div></div>
+          <div class="score-box"><div class="score-num" style="color:${sepsis>0.6?'var(--red)':sepsis>0.3?'var(--amber)':'var(--green)'}">${(sepsis*100).toFixed(0)}%</div><div class="score-lbl">Sepsis risk</div></div>
+          <div class="score-box"><div class="score-num score-${risk}">${risk}</div><div class="score-lbl">Risk level</div></div>
+          <div class="score-box"><div class="score-num" style="color:var(--text2)">${idx+1}/${patients.length}</div><div class="score-lbl">Patient</div></div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Agent Action</div>
+        <div class="action-row">
+          <button class="action-btn btn-discharge" data-action="discharge"><span class="action-icon">🏠</span><span>Discharge</span></button>
+          <button class="action-btn btn-treat" data-action="treat"><span class="action-icon">💊</span><span>Treat</span></button>
+          <button class="action-btn btn-escalate" data-action="escalate"><span class="action-icon">🚨</span><span>Escalate</span></button>
+          <button class="action-btn btn-investigate" data-action="investigate"><span class="action-icon">🔬</span><span>Investigate</span></button>
+        </div>
+        <div id="reasoning-area"></div>
+      </div>
+    </div>
+  `;
+
+  // Attach action listeners
+  document.querySelectorAll('.action-btn').forEach(btn => {
+    btn.onclick = () => takeAction(btn.getAttribute('data-action'), p.id);
+  });
+}
+
+function vitalCard(label, value, unit, status) {
+  return `<div class="vital-item ${status}">
+    <div class="vital-val">${value} <span class="vital-unit">${unit}</span></div>
+    <div class="vital-lbl">${label}</div>
+  </div>`;
+}
+
+// Core action handler
+async function takeAction(action, patientId) {
+  if (!episodeActive || !sessionId) { showToast('Start an episode first'); return; }
+
+  const btns = document.querySelectorAll('.action-btn');
+  btns.forEach(b => b.disabled = true);
+
+  try {
+    const resp = await fetch(`${BASE}/step`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:{type:action, patient_id:patientId, notes:'Manual UI action'},
+        session_id: sessionId
+      })
+    });
+    if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
+    const d = await resp.json();
+
+    const reward = d.reward ?? 0;
+    const correct = d.is_correct ?? false;
+    totalReward += reward;
+
+    if (d.q_values) renderQBars(d.q_values);
+    if (d.feature_importance) renderFeatBars(d.feature_importance);
+
+    addTimeline(action, patientId, reward, correct, d.news2_score, d.risk_level, d.reasoning);
+
+    const maxSteps = currentMaxSteps;
+    const step = d.observation?.current_step ?? 0;
+    document.getElementById('ep-step').textContent = `${step} / ${maxSteps}`;
+    document.getElementById('progress-fill').style.width = `${(step/maxSteps)*100}%`;
+
+    const reasoningDiv = document.getElementById('reasoning-area');
+    if (reasoningDiv && d.reasoning) {
+      reasoningDiv.innerHTML = `<div class="reasoning-box">${d.reasoning}</div>`;
+    }
+
+    if (!d.done && currentPatientIdx < patients.length - 1) {
+      setTimeout(() => {
+        currentPatientIdx++;
+        selectPatient(currentPatientIdx);
+        renderPatientList();
+        btns.forEach(b => b.disabled = false);
+      }, 600);
+    } else if (d.done) {
+      episodeActive = false;
+      showEpisodeEnd();
+    } else {
+      btns.forEach(b => b.disabled = false);
+    }
+
+    updateStats();
+    showToast(`${correct ? '✓ Correct' : '✗ Wrong'} — Reward: ${reward > 0 ? '+' : ''}${reward.toFixed(1)}`);
+
+  } catch(e) {
+    console.error('Action error:', e);
+    showToast('Error taking action: ' + e.message);
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+function addTimeline(action, pid, reward, correct, news2, risk, reasoning) {
+  const container = document.getElementById('timeline');
+  const item = document.createElement('div');
+  item.className = 'tl-item';
+  const actionColors = {discharge:'var(--green)',treat:'var(--amber)',escalate:'var(--red)',investigate:'var(--blue)'};
+  item.innerHTML = `
+    <div class="tl-dot ${correct ? 'dot-ok' : 'dot-wrong'}"></div>
+    <div class="tl-content" style="flex:1">
+      <div class="tl-action" style="color:${actionColors[action]||'var(--text)'}">${action.toUpperCase()} (${pid})</div>
+      <div class="tl-meta">NEWS2: ${news2??'—'} · ${risk??'—'} · ${reasoning ? reasoning.slice(0,55)+'…' : ''}</div>
+    </div>
+    <div class="tl-reward ${reward>=0?'reward-pos':'reward-neg'}">${reward>0?'+':''}${reward.toFixed(1)}</div>
+  `;
+  container.insertBefore(item, container.firstChild);
+}
+
+function renderQBars(qvals) {
+  const keys = Object.keys(qvals);
+  if (!keys.length) return;
+  const max = Math.max(...Object.values(qvals).map(Math.abs), 0.001);
+  const colors = {discharge:'var(--green)',treat:'var(--amber)',escalate:'var(--red)',investigate:'var(--blue)'};
+  document.getElementById('q-bars').innerHTML = keys.map(k => `
+    <div class="q-bar-row">
+      <div class="q-lbl">${k}</div>
+      <div class="q-track">
+        <div class="q-fill" style="width:${Math.max(0,(qvals[k]/max)*100).toFixed(1)}%;background:${colors[k.toLowerCase()]||'var(--purple)'}"></div>
+      </div>
+      <div class="q-val">${qvals[k].toFixed(2)}</div>
+    </div>`).join('');
+}
+
+function renderFeatBars(feat) {
+  const keys = Object.keys(feat).slice(0,6);
+  if (!keys.length) return;
+  const max = Math.max(...Object.values(feat), 0.01);
+  document.getElementById('feat-bars').innerHTML = keys.map(k => `
+    <div class="feature-bar">
+      <div class="feature-label"><span>${k.replace(/_/g,' ')}</span><span>${(feat[k]*100).toFixed(1)}%</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${((feat[k]/max)*100).toFixed(1)}%"></div></div>
+    </div>`).join('');
+}
+
+function showEpisodeEnd() {
+  const center = document.getElementById('center-panel');
+  const div = document.createElement('div');
+  div.className = 'patient-card';
+  div.innerHTML = `
+    <div class="card-header" style="background:var(--green-bg);border-color:var(--green-border)">
+      <div>
+        <div class="card-title" style="color:var(--green)">Episode Complete</div>
+        <div class="card-sub">All patients triaged successfully</div>
+      </div>
+    </div>
+    <div class="card-body" style="text-align:center;padding:24px">
+      <div style="font-size:36px;font-weight:700;color:var(--green)">${totalReward.toFixed(1)}</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Total Reward</div>
+      <button class="btn-primary" id="restart-episode-btn" style="max-width:200px">Start New Episode</button>
+    </div>`;
+  const existing = center.querySelector('.patient-card');
+  if (existing) existing.remove();
+  center.insertBefore(div, center.firstChild);
+  document.getElementById('restart-episode-btn')?.addEventListener('click', () => startEpisode());
+}
+
+// Episode initialization
+async function startEpisode() {
+  startBtn.innerHTML = '<span class="loader"></span>Loading patients...';
+  startBtn.disabled = true;
+  timelineEntries = [];
+  totalReward = 0;
+  currentPatientIdx = 0;
+  document.getElementById('timeline').innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px">Decisions will appear here</div>';
+
+  try {
+    const sid = 'ui_' + Date.now();
+    const resp = await fetch(`${BASE}/reset?session_id=${sid}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({task_id: currentTask})
+    });
+    if (!resp.ok) throw new Error('Reset failed');
+    const d = await resp.json();
+    sessionId = d.session_id || sid;
+    patients = d.patients || [];
+    episodeActive = true;
+    currentMaxSteps = d.max_steps || (currentTask === 'easy' ? 10 : currentTask === 'medium' ? 20 : 25);
+    
+    document.getElementById('ep-task').textContent = currentTask.charAt(0).toUpperCase() + currentTask.slice(1) + ' Mode';
+    document.getElementById('ep-session').textContent = sessionId.slice(-8);
+    document.getElementById('ep-step').textContent = `0 / ${currentMaxSteps}`;
+    document.getElementById('progress-fill').style.width = '0%';
+    
+    renderPatientList();
+    if (patients.length > 0) selectPatient(0);
+    showToast(`Episode started — ${patients.length} patients loaded`);
+    
+    startBtn.innerHTML = 'Restart Episode';
+    startBtn.disabled = false;
+  } catch(e) {
+    console.error('Start episode error:', e);
+    showToast('Failed to connect to server. Is it running?');
+    startBtn.innerHTML = 'Start Episode';
+    startBtn.disabled = false;
+    episodeActive = false;
+  }
+}
+
+// Auto demo logic
+async function runAutoDemo() {
+  if (autoRunning || !episodeActive) {
+    if(!episodeActive) showToast('Please start an episode first');
+    return;
+  }
+  autoRunning = true;
+  autoDemoBtn.disabled = true;
+  for (let i = currentPatientIdx; i < patients.length && episodeActive; i++) {
+    const p = patients[i];
+    if (!p) break;
+    const news = estimateNEWS(p.vitals);
+    let action = 'discharge';
+    if (news >= 6) action = 'escalate';
+    else if (news >= 2) action = 'treat';
+    else action = 'discharge';
+    await takeAction(action, p.id);
+    await new Promise(r => setTimeout(r, 1100));
+    if (!episodeActive) break;
+  }
+  autoRunning = false;
+  autoDemoBtn.disabled = false;
+}
+
+// Event bindings
+startBtn.onclick = startEpisode;
+autoDemoBtn.onclick = runAutoDemo;
+
+checkHealth();
+setInterval(checkHealth, 30000);
+</script>
+</body>
+</html>

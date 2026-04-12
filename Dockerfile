@@ -14,7 +14,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY server/ ./server/
 COPY *.py .
+COPY web_ui.html .
+
 COPY openenv.yaml .
+
 
 EXPOSE 7860
 

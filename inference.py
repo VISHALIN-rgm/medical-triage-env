@@ -54,6 +54,7 @@ except ImportError:
     DATASETS_AVAILABLE = False
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 
@@ -1377,6 +1378,16 @@ async def sepsis_screen(req: PredictRequest):
             "Monitor closely — low sepsis risk"
         ),
     }
+
+
+@app.get("/ui", response_class=HTMLResponse)
+async def ui():
+    """Professional triage dashboard UI."""
+    import pathlib
+    ui_path = pathlib.Path(__file__).parent / "web_ui.html"
+    if ui_path.exists():
+        return HTMLResponse(content=ui_path.read_text())
+    return HTMLResponse(content="<h2>UI not found. Make sure web_ui.html is in the same directory.</h2>")
 
 # ═══════════════════════════════════════════════════════════════
 # STARTUP
